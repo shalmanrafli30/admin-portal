@@ -9,7 +9,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const isLoginPage = pathname === '/login';
 
   return (
-    <main className={`${isLoginPage ? '' : 'lg:pl-64'} min-h-screen transition-all duration-300`}>
+    <main className={`${isLoginPage ? '' : 'lg:pl-64'} min-h-screen transition-all duration-300 lg:pt-0 sm:pt-16`}>
       {children}
     </main>
   );
