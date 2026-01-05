@@ -57,6 +57,7 @@ export default function StudentsPage() {
 			fetchStudents();
 		}, 500); // Debounce search
 		return () => clearTimeout(timer);
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [search, page]);
 
 	const handleDelete = async (id: number) => {
