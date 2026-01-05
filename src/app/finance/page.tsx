@@ -4,7 +4,7 @@ import {useState, useEffect, useCallback} from "react";
 import axios from "axios";
 import {useRouter} from "next/navigation";
 import Image from "next/image";
-import {CheckCircle, Clock, AlertCircle, Search, ExternalLink, Loader2, Eye, Plus, X} from "lucide-react";
+import {CheckCircle, Clock, AlertCircle, Search, ExternalLink, Loader2, Eye, Plus, X, Bell} from "lucide-react";
 
 interface Bill {
 	id: number;
@@ -46,6 +46,7 @@ export default function FinancePage() {
 	// Modal State
 	const [previewImage, setPreviewImage] = useState<string | null>(null);
 	const [verifyingId, setVerifyingId] = useState<number | null>(null);
+	const [remindingId, setRemindingId] = useState<number | null>(null); // State loading reminder
 	const [showCreateModal, setShowCreateModal] = useState(false);
 	const [creating, setCreating] = useState(false);
 
@@ -92,9 +93,7 @@ export default function FinancePage() {
 	// Load Dependencies (Students & Fees) saat Modal dibuka
 	useEffect(() => {
 		if (showCreateModal) {
-			// Reset search saat modal dibuka
 			setStudentSearch("");
-
 			const fetchDeps = async () => {
 				try {
 					const token = localStorage.getItem("token");
@@ -141,7 +140,7 @@ export default function FinancePage() {
 		return true;
 	});
 
-	// [BARU] Filter Siswa di Modal berdasarkan Search
+	// Filter Siswa di Modal
 	const filteredStudentsList = studentsList.filter((s) => s.name.toLowerCase().includes(studentSearch.toLowerCase()) || s.nis.includes(studentSearch));
 
 	const handleVerify = async (id: number) => {
@@ -173,7 +172,34 @@ export default function FinancePage() {
 		}
 	};
 
-	// Handle Create Bill
+	// [BARU] Handle Send Reminder
+	const handleRemind = async (id: number) => {
+		if (!confirm("Kirim email pengingat pembayaran ke orang tua siswa?")) return;
+
+		setRemindingId(id);
+		try {
+			const token = localStorage.getItem("token");
+			await axios.post(
+				`https://api.meccaschool.online/api/admin/bills/${id}/remind`,
+				{},
+				{
+					headers: {Authorization: `Bearer ${token}`}
+				}
+			);
+			alert("Reminder berhasil dikirim!");
+		} catch (error: unknown) {
+			let errorMessage = "Gagal kirim reminder.";
+			if (axios.isAxiosError(error)) {
+				errorMessage = error.response?.data?.message || error.message;
+			} else if (error instanceof Error) {
+				errorMessage = error.message;
+			}
+			alert(errorMessage);
+		} finally {
+			setRemindingId(null);
+		}
+	};
+
 	const handleCreateSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setCreating(true);
@@ -199,7 +225,6 @@ export default function FinancePage() {
 		}
 	};
 
-	// Auto-fill amount saat fee dipilih
 	const handleFeeChange = (feeId: string) => {
 		setNewBill((prev) => ({...prev, feeId}));
 		const selectedFee = feesList.find((f) => f.id.toString() === feeId);
@@ -217,7 +242,6 @@ export default function FinancePage() {
 				</div>
 
 				<div className="flex gap-3">
-					{/* Filter Tab */}
 					<div className="flex bg-white p-1 rounded-lg border shadow-sm">
 						{["ALL", "Verifying", "Pending", "Paid"].map((status) => (
 							<button key={status} onClick={() => setFilterStatus(status)} className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${filterStatus === status ? "bg-indigo-100 text-indigo-700" : "text-gray-500 hover:bg-gray-50"}`}>
@@ -225,15 +249,12 @@ export default function FinancePage() {
 							</button>
 						))}
 					</div>
-
-					{/* Tombol Buat Tagihan */}
 					<button onClick={() => setShowCreateModal(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center shadow-sm">
 						<Plus className="w-4 h-4 mr-2" /> Buat Tagihan
 					</button>
 				</div>
 			</div>
 
-			{/* Search Bar Utama */}
 			<div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
 				<div className="relative">
 					<Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -241,7 +262,6 @@ export default function FinancePage() {
 				</div>
 			</div>
 
-			{/* Table Utama */}
 			<div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
 				<div className="overflow-x-auto">
 					<table className="w-full text-left">
@@ -298,17 +318,28 @@ export default function FinancePage() {
 											)}
 										</td>
 										<td className="px-6 py-4 text-right">
-											{bill.paymentProof && (
-												<button onClick={() => setPreviewImage(`https://api.meccaschool.online/${bill.paymentProof}`)} className="text-indigo-600 hover:text-indigo-800 text-sm font-medium mr-3 inline-flex items-center">
-													<Eye className="w-4 h-4 mr-1" /> Bukti
-												</button>
-											)}
+											<div className="flex items-center justify-end gap-2">
+												{/* Tombol Reminder (Jika belum lunas) */}
+												{bill.status !== "Paid" && (
+													<button onClick={() => handleRemind(bill.id)} disabled={remindingId === bill.id} className="text-orange-500 hover:text-orange-700 p-2 rounded-lg hover:bg-orange-50 transition" title="Kirim Pengingat Pembayaran">
+														{remindingId === bill.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+													</button>
+												)}
 
-											{bill.status !== "Paid" && (
-												<button onClick={() => handleVerify(bill.id)} disabled={verifyingId === bill.id} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-700 disabled:opacity-50">
-													{verifyingId === bill.id ? "..." : "Verifikasi"}
-												</button>
-											)}
+												{/* Tombol Lihat Bukti */}
+												{bill.paymentProof && (
+													<button onClick={() => setPreviewImage(`https://api.meccaschool.online/${bill.paymentProof}`)} className="text-indigo-600 hover:text-indigo-800 text-sm font-medium inline-flex items-center">
+														<Eye className="w-4 h-4 mr-1" /> Bukti
+													</button>
+												)}
+
+												{/* Tombol Verifikasi */}
+												{bill.status !== "Paid" && (
+													<button onClick={() => handleVerify(bill.id)} disabled={verifyingId === bill.id} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-700 disabled:opacity-50">
+														{verifyingId === bill.id ? "..." : "Verifikasi"}
+													</button>
+												)}
+											</div>
 										</td>
 									</tr>
 								))
@@ -318,7 +349,6 @@ export default function FinancePage() {
 				</div>
 			</div>
 
-			{/* Modal Preview Gambar */}
 			{previewImage && (
 				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setPreviewImage(null)}>
 					<div className="bg-white p-2 rounded-xl max-w-2xl w-full relative" onClick={(e) => e.stopPropagation()}>
@@ -338,7 +368,6 @@ export default function FinancePage() {
 				</div>
 			)}
 
-			{/* MODAL CREATE BILL */}
 			{showCreateModal && (
 				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
 					<div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 relative animate-in fade-in zoom-in duration-200">
@@ -346,17 +375,13 @@ export default function FinancePage() {
 							<X className="w-5 h-5" />
 						</button>
 						<h2 className="text-xl font-bold text-gray-800 mb-4">Buat Tagihan Manual</h2>
-
 						<form onSubmit={handleCreateSubmit} className="space-y-4">
 							<div>
 								<label className="block text-sm font-medium text-gray-700 mb-1">Pilih Siswa</label>
-
-								{/* [BARU] Input Pencarian Siswa di dalam Modal */}
 								<div className="relative mb-2">
 									<Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
-									<input type="text" placeholder="Ketik Nama atau NIS untuk mencari..." className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-gray-700" value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} />
+									<input type="text" placeholder="Ketik Nama atau NIS..." className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-gray-700" value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} />
 								</div>
-
 								<select required className="w-full border p-2.5 rounded-lg text-gray-700 bg-white" value={newBill.studentId} onChange={(e) => setNewBill({...newBill, studentId: e.target.value})}>
 									<option value="">-- Hasil Pencarian ({filteredStudentsList.length}) --</option>
 									{filteredStudentsList.map((s) => (
@@ -365,9 +390,7 @@ export default function FinancePage() {
 										</option>
 									))}
 								</select>
-								<p className="text-xs text-gray-400 mt-1">Ketik di kotak pencarian untuk menyaring daftar siswa.</p>
 							</div>
-
 							<div>
 								<label className="block text-sm font-medium text-gray-700 mb-1">Jenis Tagihan</label>
 								<select required className="w-full border p-2.5 rounded-lg text-gray-700 bg-white" value={newBill.feeId} onChange={(e) => handleFeeChange(e.target.value)}>
@@ -379,7 +402,6 @@ export default function FinancePage() {
 									))}
 								</select>
 							</div>
-
 							<div className="grid grid-cols-2 gap-4">
 								<div>
 									<label className="block text-sm font-medium text-gray-700 mb-1">Jumlah (Rp)</label>
@@ -390,7 +412,6 @@ export default function FinancePage() {
 									<input type="date" required className="w-full border p-2.5 rounded-lg text-gray-700" value={newBill.dueDate} onChange={(e) => setNewBill({...newBill, dueDate: e.target.value})} />
 								</div>
 							</div>
-
 							<div className="grid grid-cols-2 gap-4">
 								<div>
 									<label className="block text-sm font-medium text-gray-700 mb-1">Bulan (Angka)</label>
@@ -401,7 +422,6 @@ export default function FinancePage() {
 									<input type="number" className="w-full border p-2.5 rounded-lg text-gray-700" value={newBill.year} onChange={(e) => setNewBill({...newBill, year: parseInt(e.target.value)})} />
 								</div>
 							</div>
-
 							<button type="submit" disabled={creating} className="w-full bg-indigo-600 text-white font-bold py-2.5 rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 mt-4 flex justify-center items-center">
 								{creating ? <Loader2 className="w-5 h-5 animate-spin" /> : "Simpan Tagihan"}
 							</button>
